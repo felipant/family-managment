@@ -1,0 +1,15 @@
+{
+  "d1_databases": [
+    {
+      "binding": "financas_db",
+      "database_name": "financas-db",
+      "database_id": "703b6fc4-1962-4050-8d88-b08170ec5d70"
+    }
+  ]
+}
+
+git init
+git add .
+git commit -m "início"
+git branch -M main
+git push -u origin main
