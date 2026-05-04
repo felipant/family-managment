@@ -12,6 +12,6 @@ npx wrangler d1 execute family-db --local --file=./schema.sql
 
 git init
 git add .
-git commit -m "início"
+git commit -m "mac"
 git branch -M main
 git push -u origin main
