@@ -4,5 +4,5 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 
 [[d1_databases]]
 binding = "DB" # Nome usado no código (platform.env.DB)
-database_name = "financas-db"
+database_name = "family-db"
 database_id = "f5516ca4-e327-4b47-8522-d2767b3a97d2"

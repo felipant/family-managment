@@ -1,12 +1,14 @@
 {
   "d1_databases": [
     {
-      "binding": "financas_db",
-      "database_name": "financas-db",
-      "database_id": "703b6fc4-1962-4050-8d88-b08170ec5d70"
+      "binding": "family_db",
+      "database_name": "family-db",
+      "database_id": "f5516ca4-e327-4b47-8522-d2767b3a97d2"
     }
   ]
 }
+
+npx wrangler d1 execute family-db --local --file=./schema.sql
 
 git init
 git add .
