@@ -220,17 +220,32 @@ export const actions = {
       let isMacRoman = false;
       for (let i = 0; i < bytes.length; i++) {
         const b = bytes[i];
-        // 0x8D = ç, 0x8B = ã, 0x87 = á, 0x92 = í in Mac OS Roman
         if (b === 0x8D || b === 0x8B || b === 0x87 || b === 0x92) {
           isMacRoman = true;
           break;
         }
-        // 0xE7 = ç, 0xE3 = ã, 0xE1 = á in Windows-1252
         if (b === 0xE7 || b === 0xE3 || b === 0xE1) {
           break;
         }
       }
-      text = new TextDecoder(isMacRoman ? 'macintosh' : 'windows-1252').decode(rawBytes);
+
+      if (isMacRoman) {
+        // Cloudflare Workers TextDecoder doesn't support 'macintosh', so we map common PT-BR characters manually
+        const macMap = {
+          0x87: 'á', 0x8B: 'ã', 0x8D: 'ç', 0x8E: 'é', 0x92: 'í',
+          0x97: 'ó', 0x9B: 'õ', 0x9C: 'ú', 0x90: 'ê', 0x99: 'ô',
+          0x88: 'à', 0x89: 'â', 0x8A: 'ä', 0x8F: 'è'
+        };
+        let res = '';
+        for (let i = 0; i < bytes.length; i++) {
+          const b = bytes[i];
+          if (b < 0x80) res += String.fromCharCode(b);
+          else res += macMap[b] || '?';
+        }
+        text = res;
+      } else {
+        text = new TextDecoder('windows-1252').decode(rawBytes);
+      }
     }
     text = text.replace(/^\uFEFF/, '');
     const lines = text.split(/\r?\n/).filter(l => l.trim());
