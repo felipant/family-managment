@@ -1,0 +1,6 @@
+data,valor,parcelas,categoria,subcategoria,item,tipo,comentario,pagamento
+01/02/2025,18.98,1,Alimentação,Ovos,ovos,variável,,pix
+01/02/2025,16.24,1,Alimentação,Quitandas,quitandas,variável,,pix
+01/02/2025,3.39,1,Alimentação,Ultraprocessados,ultraprocessados,variável,,pix
+01/02/2025,46.9,1,Família e Presentes,Presentes,presentes,variável,heldinho,pix
+01/02/2025,28,1,Vestuário e Cuidados Pessoais,Roupas e calçados,roupas e calçados,variável,fantasia Luísa ,pix

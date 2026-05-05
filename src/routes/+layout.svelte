@@ -7,8 +7,10 @@
   let sidebarOpen = $state(true);
 
   const NAV = [
-    { href: '/',              icon: '◈', label: 'Gastos',        sub: 'Lançamentos' },
-    { href: '/gastos-fixos', icon: '⊟', label: 'Gastos Fixos',  sub: 'Recorrentes' },
+    { href: '/',                  icon: '◈', label: 'Gastos',        sub: 'Lançamentos' },
+    { href: '/gastos-fixos',      icon: '⊟', label: 'Gastos Fixos',  sub: 'Recorrentes' },
+    { href: '/dashboard',         icon: '◉', label: 'Dashboard',      sub: 'Detalhado' },
+    { href: '/dashboard-grafico', icon: '◐', label: 'Dashboard',      sub: 'Gráfico' },
   ];
 </script>
 
@@ -16,14 +18,14 @@
   <link rel="icon" href={favicon} />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
 </svelte:head>
 
 <div class="shell" class:sidebar-collapsed={!sidebarOpen}>
   <aside class="sidebar">
     <div class="sidebar-top">
       <div class="logo">
-        <div class="logo-mark">₿</div>
+        <div class="logo-mark">$</div>
         {#if sidebarOpen}
           <div class="logo-text">
             <span class="logo-name">Finanças</span>
@@ -69,18 +71,18 @@
 
 <style>
   :global(:root) {
-    --bg:         #060a14;
-    --bg-surface: #0b1020;
-    --bg-card:    #0f1626;
-    --bg-elevated:#141d30;
-    --bg-hover:   #1a2540;
-    --bg-input:   #0d1525;
-    --border:     #1b2d50;
-    --border-2:   #243860;
-    --border-3:   #2e4878;
-    --text:       #dde4f5;
-    --text-2:     #7d8fae;
-    --text-3:     #3d506e;
+    --bg:         #000000;
+    --bg-surface: #080808;
+    --bg-card:    #0d0d0d;
+    --bg-elevated:#151515;
+    --bg-hover:   #1a1a1a;
+    --bg-input:   #0a0a0a;
+    --border:     #1e1e1e;
+    --border-2:   #2a2a2a;
+    --border-3:   #383838;
+    --text:       #e0e0e0;
+    --text-2:     #8a8a8a;
+    --text-3:     #505050;
     --green:      #00e07b;
     --green-dim:  #059669;
     --green-bg:   rgba(0,200,110,0.08);
@@ -93,8 +95,8 @@
     --amber-bg:   rgba(245,158,11,0.1);
     --radius:     10px;
     --radius-lg:  16px;
-    --shadow:     0 4px 24px rgba(0,0,0,0.5);
-    --shadow-lg:  0 16px 56px rgba(0,0,0,0.75);
+    --shadow:     0 4px 24px rgba(0,0,0,0.7);
+    --shadow-lg:  0 16px 56px rgba(0,0,0,0.85);
   }
 
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
@@ -153,12 +155,12 @@
     border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
     font-size: 16px; color: #000;
-    font-family: 'Syne', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-weight: 800;
     box-shadow: 0 0 18px rgba(0,224,123,0.2);
   }
   .logo-text { display: flex; flex-direction: column; white-space: nowrap; }
-  .logo-name { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; line-height: 1.2; }
+  .logo-name { font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; line-height: 1.2; }
   .logo-sub  { font-size: 10.5px; color: var(--text-3); }
 
   .toggle-btn {
