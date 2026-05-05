@@ -1,4 +1,4 @@
-name = "family-management"
+name = "family-managment"
 compatibility_date = "2024-05-01"
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
