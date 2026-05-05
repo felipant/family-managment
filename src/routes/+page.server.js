@@ -209,14 +209,28 @@ export const actions = {
     const file = fd.get('csvFile');
     if (!file || typeof file === 'string') return { error: 'Arquivo CSV não enviado' };
 
-    // Read file with encoding detection: try UTF-8 first, fallback to windows-1252 (common in Brazilian Excel CSVs)
+    // Read file with encoding detection: try UTF-8 first, fallback to macintosh or windows-1252
     const rawBytes = await file.arrayBuffer();
+    const bytes = new Uint8Array(rawBytes);
     let text;
     try {
       text = new TextDecoder('utf-8', { fatal: true }).decode(rawBytes);
     } catch {
-      // UTF-8 failed, try windows-1252 (covers Latin-1, common for PT-BR CSVs from Excel)
-      text = new TextDecoder('windows-1252').decode(rawBytes);
+      // UTF-8 failed. Detect if Mac OS Roman or Windows-1252 (Latin-1)
+      let isMacRoman = false;
+      for (let i = 0; i < bytes.length; i++) {
+        const b = bytes[i];
+        // 0x8D = ç, 0x8B = ã, 0x87 = á, 0x92 = í in Mac OS Roman
+        if (b === 0x8D || b === 0x8B || b === 0x87 || b === 0x92) {
+          isMacRoman = true;
+          break;
+        }
+        // 0xE7 = ç, 0xE3 = ã, 0xE1 = á in Windows-1252
+        if (b === 0xE7 || b === 0xE3 || b === 0xE1) {
+          break;
+        }
+      }
+      text = new TextDecoder(isMacRoman ? 'macintosh' : 'windows-1252').decode(rawBytes);
     }
     text = text.replace(/^\uFEFF/, '');
     const lines = text.split(/\r?\n/).filter(l => l.trim());
