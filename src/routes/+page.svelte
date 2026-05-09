@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { tick } from "svelte";
 
   let { data } = $props();
 
@@ -154,6 +155,43 @@
     showAddCompra = false;
   }
 
+  function formatCurrencyInput(val: string): string {
+    const digits = val.replace(/\D/g, "");
+    if (!digits) return "";
+    const num = parseInt(digits, 10) / 100;
+    return num.toFixed(2);
+  }
+
+  function handleSearchKeyDown(e: KeyboardEvent, idx: number) {
+    if (e.key === "Tab") {
+      const ci = cItens[idx];
+      if (ci.open && ci.results.length > 0) {
+        e.preventDefault();
+        pickCI(idx, ci.results[0]);
+      }
+    }
+  }
+
+  async function handleValorKeyDown(e: KeyboardEvent, idx: number) {
+    if (e.key === "Tab" && !e.shiftKey) {
+      if (idx === cItens.length - 1) {
+        e.preventDefault();
+        addCompraItem();
+        await tick();
+        const nextInput = document.getElementById(`search-input-${idx + 1}`);
+        if (nextInput) {
+          nextInput.focus();
+        }
+      } else {
+        e.preventDefault();
+        const nextInput = document.getElementById(`search-input-${idx + 1}`);
+        if (nextInput) {
+          nextInput.focus();
+        }
+      }
+    }
+  }
+
   // ── EDIT GASTO ────────────────────────────────────────────────────────────
   let editItemSearch = $state("");
   let editItemResults = $state<any[]>([]);
@@ -161,6 +199,9 @@
 
   function openEdit(g: any) {
     editGasto = { ...g };
+    if (editGasto && editGasto.valor !== undefined) {
+      editGasto.valor = parseFloat(editGasto.valor).toFixed(2);
+    }
     editItemSearch = g.item_nome || "";
     editItemOpen = false;
     editItemResults = [];
@@ -204,6 +245,17 @@
   let newCatName = $state("");
   let newSubcatData = $state<Record<number, string>>({});
   let newItemData = $state<Record<number, string>>({});
+
+  let catView = $state<'categories' | 'subcategories' | 'itens'>('categories');
+  let selectedCatId = $state<number | null>(null);
+  let selectedSubcatId = $state<number | null>(null);
+  let newSubcatName = $state("");
+  let newItemName = $state("");
+
+  let selectedCatName = $derived(data.categorias.find(c => c.id === selectedCatId)?.nome || "");
+  let selectedSubcatName = $derived(data.subcategorias.find(s => s.id === selectedSubcatId)?.nome || "");
+  let selectedSubcats = $derived((data.subcategorias as any[]).filter(s => s.categoria_id === selectedCatId));
+  let selectedItens = $derived((data.itens as any[]).filter(i => i.subcategoria_id === selectedSubcatId));
 
   let subcatsByCategoria = $derived(
     (data.categorias as any[]).reduce(
@@ -501,11 +553,13 @@
                 <!-- Item search -->
                 <div class="item-field" style="flex:2; position:relative;">
                   <input
+                    id="search-input-{idx}"
                     class="form-input"
                     type="text"
                     placeholder="Pesquisar item..."
                     value={ci.item_nome}
                     oninput={(e) => searchCI(idx, e.currentTarget.value)}
+                    onkeydown={(e) => handleSearchKeyDown(e, idx)}
                     onblur={() =>
                       setTimeout(() => {
                         cItens[idx].open = false;
@@ -533,12 +587,16 @@
                 <!-- Valor -->
                 <div class="item-field" style="flex:1">
                   <input
+                    id="valor-input-{idx}"
                     class="form-input"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0,00"
-                    bind:value={ci.valor}
+                    type="text"
+                    inputmode="numeric"
+                    placeholder="0.00"
+                    value={ci.valor}
+                    oninput={(e) => {
+                      ci.valor = formatCurrencyInput(e.currentTarget.value);
+                    }}
+                    onkeydown={(e) => handleValorKeyDown(e, idx)}
                   />
                 </div>
 
@@ -637,202 +695,315 @@
   >
     <div class="modal modal-cat" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
-        <h2 class="modal-title">Gerenciar Categorias</h2>
-        <button class="modal-close" onclick={() => (showManageCat = false)}
+        <h2 class="modal-title">
+          {#if catView === 'categories'}
+            Gerenciar Categorias
+          {:else}
+            <button class="btn-back-header" onclick={() => {
+              if (catView === 'itens') {
+                catView = 'subcategories';
+              } else {
+                catView = 'categories';
+              }
+            }}>
+              ← Voltar
+            </button>
+            <span style="margin-left: 10px;">
+              {#if catView === 'subcategories'}
+                {selectedCatName}
+              {:else}
+                {selectedSubcatName}
+              {/if}
+            </span>
+          {/if}
+        </h2>
+        <button class="modal-close" onclick={() => { showManageCat = false; catView = 'categories'; }}
           >✕</button
         >
       </div>
+
       <div class="modal-body cat-manager">
-        {#each data.categorias as cat (cat.id)}
-          <div class="cat-card">
-            <!-- Categoria row -->
-            <div class="cat-row">
-              <button
-                type="button"
-                class="expand-toggle"
-                onclick={() => (catExpanded[cat.id] = !catExpanded[cat.id])}
-              >
-                <span class="expand-icon"
-                  >{catExpanded[cat.id] ? "▾" : "▸"}</span
-                >
-                <span class="cat-name">{cat.nome}</span>
-                <span class="cat-count"
-                  >{(subcatsByCategoria[cat.id] || []).length} subcategorias</span
-                >
-              </button>
-              <form
-                method="post"
-                action="?/deleteCategoria"
-                use:enhance={() =>
-                  async ({ update }) => {
-                    await update();
-                  }}
-              >
-                <input type="hidden" name="id" value={cat.id} />
-                <button
-                  type="submit"
-                  class="btn-delete-sm"
-                  onclick={(e) => {
-                    if (
-                      !confirm(
-                        `Excluir categoria "${cat.nome}"? Isso pode afetar subcategorias e itens vinculados.`,
-                      )
-                    )
-                      e.preventDefault();
-                  }}>✕</button
-                >
-              </form>
-            </div>
-
-            {#if catExpanded[cat.id]}
-              <div class="cat-children">
-                {#each subcatsByCategoria[cat.id] || [] as sub (sub.id)}
-                  <div class="subcat-card">
-                    <div class="subcat-row">
-                      <button
-                        type="button"
-                        class="expand-toggle expand-toggle-sm"
-                        onclick={() =>
-                          (subcatExpanded[sub.id] = !subcatExpanded[sub.id])}
-                      >
-                        <span class="expand-icon"
-                          >{subcatExpanded[sub.id] ? "▾" : "▸"}</span
-                        >
-                        <span class="subcat-name">{sub.nome}</span>
-                        <span class="cat-count"
-                          >{(itensBySubcat[sub.id] || []).length} itens</span
-                        >
-                      </button>
-                      <form
-                        method="post"
-                        action="?/deleteSubcategoria"
-                        use:enhance={() =>
-                          async ({ update }) => {
-                            await update();
-                          }}
-                      >
-                        <input type="hidden" name="id" value={sub.id} />
-                        <button
-                          type="submit"
-                          class="btn-delete-sm"
-                          onclick={(e) => {
-                            if (!confirm(`Excluir subcategoria "${sub.nome}"?`))
-                              e.preventDefault();
-                          }}>✕</button
-                        >
-                      </form>
-                    </div>
-
-                    {#if subcatExpanded[sub.id]}
-                      <div class="items-chips">
-                        {#each itensBySubcat[sub.id] || [] as item (item.id)}
-                          <div class="item-chip">
-                            <span>{item.nome}</span>
-                            <form
-                              method="post"
-                              action="?/deleteItem"
-                              use:enhance={() =>
-                                async ({ update }) => {
-                                  await update();
-                                }}
-                            >
-                              <input type="hidden" name="id" value={item.id} />
-                              <button
-                                type="submit"
-                                class="chip-delete"
-                                onclick={(e) => {
-                                  if (!confirm(`Excluir item "${item.nome}"?`))
-                                    e.preventDefault();
-                                }}>✕</button
-                              >
-                            </form>
-                          </div>
-                        {/each}
-                        <!-- Add item -->
-                        <form
-                          method="post"
-                          action="?/addItem"
-                          class="inline-form"
-                          use:enhance={() =>
-                            async ({ result, update }) => {
-                              if (result.type === "success")
-                                newItemData[sub.id] = "";
-                              await update();
-                            }}
-                        >
-                          <input
-                            type="hidden"
-                            name="subcategoria_id"
-                            value={sub.id}
-                          />
-                          <input
-                            class="inline-input"
-                            type="text"
-                            name="nome"
-                            bind:value={newItemData[sub.id]}
-                            placeholder="Novo item..."
-                            required
-                          />
-                          <button type="submit" class="btn-inline-add">+</button
-                          >
-                        </form>
-                      </div>
-                    {/if}
-                  </div>
-                {/each}
-
-                <!-- Add subcategoria -->
+        {#if catView === 'categories'}
+          <!-- VIEW 1: CATEGORIES -->
+          <p class="view-desc">Selecione uma categoria para gerenciar suas subcategorias:</p>
+          <div class="cats-list-container">
+            {#each data.categorias as cat (cat.id)}
+              <div class="cat-row-drill">
+                <!-- Clickable name form -->
                 <form
                   method="post"
-                  action="?/addSubcategoria"
-                  class="add-subcat-form"
+                  action="?/updateCategoria"
+                  class="editable-input-form"
+                  use:enhance
+                >
+                  <input type="hidden" name="id" value={cat.id} />
+                  <input
+                    class="editable-input cat-name-drill"
+                    type="text"
+                    name="nome"
+                    value={cat.nome}
+                    onchange={(e) => e.currentTarget.form.requestSubmit()}
+                    title="Clique para editar"
+                  />
+                </form>
+
+                <button
+                  type="button"
+                  class="btn-drill-down"
+                  onclick={() => {
+                    selectedCatId = cat.id;
+                    catView = 'subcategories';
+                  }}
+                >
+                  Subcategorias ›
+                </button>
+
+                <form
+                  method="post"
+                  action="?/deleteCategoria"
                   use:enhance={() =>
-                    async ({ result, update }) => {
-                      if (result.type === "success") newSubcatData[cat.id] = "";
+                    async ({ update }) => {
                       await update();
                     }}
                 >
-                  <input type="hidden" name="categoria_id" value={cat.id} />
-                  <input
-                    class="inline-input"
-                    type="text"
-                    name="nome"
-                    bind:value={newSubcatData[cat.id]}
-                    placeholder="Nova subcategoria..."
-                    required
-                  />
-                  <button type="submit" class="btn-inline-add">+</button>
+                  <input type="hidden" name="id" value={cat.id} />
+                  <button
+                    type="submit"
+                    class="btn-delete-sm"
+                    onclick={(e) => {
+                      if (
+                        !confirm(
+                          `Excluir categoria "${cat.nome}"? Isso pode afetar subcategorias e itens vinculados.`,
+                        )
+                      )
+                        e.preventDefault();
+                    }}>✕</button
+                  >
                 </form>
               </div>
-            {/if}
+            {:else}
+              <p class="cat-empty">Nenhuma categoria cadastrada ainda.</p>
+            {/each}
           </div>
-        {:else}
-          <p class="cat-empty">Nenhuma categoria cadastrada ainda.</p>
-        {/each}
 
-        <!-- Add categoria -->
-        <form
-          method="post"
-          action="?/addCategoria"
-          class="add-cat-form"
-          use:enhance={() =>
-            async ({ result, update }) => {
-              if (result.type === "success") newCatName = "";
-              await update();
+          <!-- Add Categoria -->
+          <form
+            method="post"
+            action="?/addCategoria"
+            class="add-cat-form-drill"
+            use:enhance={() => {
+              const addedName = newCatName;
+              return async ({ result, update }) => {
+                await update();
+                if (result.type === "success") {
+                  const newCat = data.categorias.find(c => c.nome.toLowerCase() === addedName.toLowerCase());
+                  if (newCat) {
+                    selectedCatId = newCat.id;
+                    catView = 'subcategories';
+                  }
+                  newCatName = "";
+                }
+              };
             }}
-        >
-          <input
-            class="form-input"
-            type="text"
-            name="nome"
-            bind:value={newCatName}
-            placeholder="Nome da nova categoria..."
-            required
-          />
-          <button type="submit" class="btn btn-primary btn-sm"
-            >+ Categoria</button
           >
-        </form>
+            <input
+              class="form-input"
+              type="text"
+              name="nome"
+              bind:value={newCatName}
+              placeholder="Nome da nova categoria..."
+              required
+            />
+            <button type="submit" class="btn btn-primary btn-sm"
+              >+ Categoria</button
+            >
+          </form>
+
+        {:else}
+          <div class="header-back-row">
+            <button
+              class="btn-back"
+              onclick={() => {
+                if (catView === 'itens') {
+                  catView = 'subcategories';
+                } else {
+                  catView = 'categories';
+                }
+              }}
+            >
+              ← Voltar para {#if catView === 'subcategories'}Categorias{:else}Subcategorias{/if}
+            </button>
+          </div>
+
+          {#if catView === 'subcategories'}
+            <!-- VIEW 2: SUBCATEGORIES -->
+            <p class="view-desc">Subcategorias de <strong>{selectedCatName}</strong>. Selecione uma para ver os itens:</p>
+            <div class="cats-list-container">
+              {#each selectedSubcats as sub (sub.id)}
+                <div class="cat-row-drill">
+                  <form
+                    method="post"
+                    action="?/updateSubcategoria"
+                    class="editable-input-form"
+                    use:enhance
+                  >
+                    <input type="hidden" name="id" value={sub.id} />
+                    <input
+                      class="editable-input subcat-name-drill"
+                      type="text"
+                      name="nome"
+                      value={sub.nome}
+                      onchange={(e) => e.currentTarget.form.requestSubmit()}
+                      title="Clique para editar"
+                    />
+                  </form>
+
+                  <button
+                    type="button"
+                    class="btn-drill-down"
+                    onclick={() => {
+                      selectedSubcatId = sub.id;
+                      catView = 'itens';
+                    }}
+                  >
+                    Itens ›
+                  </button>
+
+                  <form
+                    method="post"
+                    action="?/deleteSubcategoria"
+                    use:enhance={() =>
+                      async ({ update }) => {
+                        await update();
+                      }}
+                  >
+                    <input type="hidden" name="id" value={sub.id} />
+                    <button
+                      type="submit"
+                      class="btn-delete-sm"
+                      onclick={(e) => {
+                        if (!confirm(`Excluir subcategoria "${sub.nome}"?`))
+                          e.preventDefault();
+                      }}>✕</button
+                    >
+                  </form>
+                </div>
+              {:else}
+                <p class="cat-empty">Nenhuma subcategoria cadastrada para esta categoria.</p>
+              {/each}
+            </div>
+
+            <!-- Add Subcategoria -->
+            <form
+              method="post"
+              action="?/addSubcategoria"
+              class="add-cat-form-drill"
+              use:enhance={() => {
+                const addedName = newSubcatName;
+                return async ({ result, update }) => {
+                  await update();
+                  if (result.type === "success") {
+                    const subcats = (data.subcategorias as any[]).filter(s => s.categoria_id === selectedCatId);
+                    const newSub = subcats.find(s => s.nome.toLowerCase() === addedName.toLowerCase());
+                    if (newSub) {
+                      selectedSubcatId = newSub.id;
+                      catView = 'itens';
+                    }
+                    newSubcatName = "";
+                  }
+                };
+              }}
+            >
+              <input type="hidden" name="categoria_id" value={selectedCatId} />
+              <input
+                class="form-input"
+                type="text"
+                name="nome"
+                bind:value={newSubcatName}
+                placeholder="Nome da nova subcategoria..."
+                required
+              />
+              <button type="submit" class="btn btn-primary btn-sm"
+                >+ Subcategoria</button
+              >
+            </form>
+
+          {:else if catView === 'itens'}
+            <!-- VIEW 3: ITENS -->
+            <p class="view-desc">Itens vinculados à subcategoria <strong>{selectedSubcatName}</strong>:</p>
+            <div class="cats-list-container">
+              {#each selectedItens as item (item.id)}
+                <div class="cat-row-drill">
+                  <form
+                    method="post"
+                    action="?/updateItem"
+                    class="editable-input-form"
+                    use:enhance
+                  >
+                    <input type="hidden" name="id" value={item.id} />
+                    <input
+                      class="editable-input item-name-drill"
+                      type="text"
+                      name="nome"
+                      value={item.nome}
+                      onchange={(e) => e.currentTarget.form.requestSubmit()}
+                      title="Clique para editar"
+                    />
+                  </form>
+
+                  <form
+                    method="post"
+                    action="?/deleteItem"
+                    use:enhance={() =>
+                      async ({ update }) => {
+                        await update();
+                      }}
+                  >
+                    <input type="hidden" name="id" value={item.id} />
+                    <button
+                      type="submit"
+                      class="btn-delete-sm"
+                      onclick={(e) => {
+                        if (!confirm(`Excluir item "${item.nome}"?`))
+                          e.preventDefault();
+                      }}>✕</button
+                    >
+                  </form>
+                </div>
+              {:else}
+                <p class="cat-empty">Nenhum item cadastrado para esta subcategoria.</p>
+              {/each}
+            </div>
+
+            <!-- Add Item -->
+            <form
+              method="post"
+              action="?/addItem"
+              class="add-cat-form-drill"
+              use:enhance={() => {
+                return async ({ result, update }) => {
+                  await update();
+                  if (result.type === "success") {
+                    newItemName = "";
+                  }
+                };
+              }}
+            >
+              <input type="hidden" name="subcategoria_id" value={selectedSubcatId} />
+              <input
+                class="form-input"
+                type="text"
+                name="nome"
+                bind:value={newItemName}
+                placeholder="Nome do novo item..."
+                required
+              />
+              <button type="submit" class="btn btn-primary btn-sm"
+                >+ Item</button
+              >
+            </form>
+          {/if}
+        {/if}
       </div>
     </div>
   </div>
@@ -978,10 +1149,13 @@
               <label class="form-label">Valor (R$)</label>
               <input
                 class="form-input"
-                type="number"
-                step="0.01"
+                type="text"
+                inputmode="numeric"
                 name="valor"
-                bind:value={editGasto.valor}
+                value={editGasto.valor}
+                oninput={(e) => {
+                  editGasto.valor = formatCurrencyInput(e.currentTarget.value);
+                }}
                 required
               />
             </div>
@@ -1615,6 +1789,7 @@
   }
   .modal-cat {
     max-width: 640px;
+    max-height: 85vh;
   }
   .modal-edit {
     max-width: 780px;
@@ -1666,6 +1841,7 @@
     padding: 24px 28px 32px;
     overflow-y: auto;
     flex: 1;
+    min-height: 0;
   }
   .modal-footer {
     display: flex;
@@ -1900,34 +2076,61 @@
     padding: 12px 14px;
     background: var(--bg-card);
   }
-  .expand-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 1;
+  .expand-toggle-btn {
     background: none;
     border: none;
     cursor: pointer;
-    text-align: left;
+    padding: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    border-radius: 4px;
+    transition: all 0.15s ease;
+  }
+  .expand-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+  }
+  .editable-input-form {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    margin: 0;
     padding: 0;
   }
-  .expand-toggle-sm .cat-name {
-    font-size: 13.5px;
+  .editable-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed transparent;
+    color: #fff;
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    padding: 2px 4px;
+    width: 100%;
+    outline: none;
+    transition: all 0.15s ease;
+  }
+  .editable-input:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom-color: var(--border-3);
+  }
+  .editable-input:focus {
+    background: var(--bg-input);
+    border-bottom: 1px solid var(--blue);
+    border-radius: 4px;
   }
   .expand-icon {
     font-size: 12px;
     color: var(--text-3);
     width: 14px;
   }
-  .cat-name {
-    font-weight: 600;
-    color: #fff;
-    font-size: 14.5px;
-  }
   .cat-count {
     font-size: 11.5px;
     color: var(--text-3);
-    margin-left: 4px;
+    margin-right: 8px;
+    white-space: nowrap;
   }
   .cat-children {
     padding: 8px 14px 12px 24px;
@@ -1959,18 +2162,33 @@
     padding: 8px 12px 10px 24px;
     border-top: 1px solid var(--border);
   }
-  .item-chip {
+  .item-chip-editable {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 8px 4px 10px;
+    gap: 4px;
+    padding: 2px 6px 2px 10px;
     background: var(--bg-elevated);
     border: 1px solid var(--border-2);
     border-radius: 20px;
-    font-size: 12.5px;
-    color: var(--text-2);
+    transition: all 0.15s ease;
   }
-  .chip-delete {
+  .item-chip-editable:hover {
+    border-color: var(--border-3);
+    background: var(--bg-hover);
+  }
+  .item-chip-input {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-2);
+    width: 100px;
+    border-bottom: none;
+    padding: 0;
+  }
+  .item-chip-input:focus {
+    width: 130px;
+    background: transparent;
+  }
+  .chip-delete-btn {
     width: 16px;
     height: 16px;
     border: none;
@@ -1985,7 +2203,7 @@
     transition: all 0.12s;
     padding: 0;
   }
-  .chip-delete:hover {
+  .chip-delete-btn:hover {
     background: var(--red-bg);
     color: var(--red);
   }
@@ -2257,5 +2475,105 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  /* ── Category drill-down styles ── */
+  .view-desc {
+    font-size: 13.5px;
+    color: var(--text-2);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .cats-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 380px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+    padding-right: 4px;
+  }
+  .cat-row-drill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: all 0.15s ease;
+  }
+  .cat-row-drill:hover {
+    border-color: var(--border-2);
+    background: var(--bg-hover);
+  }
+  .btn-drill-down {
+    background: var(--blue-bg);
+    color: var(--blue);
+    border: 1px solid rgba(66, 133, 255, 0.2);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn-drill-down:hover {
+    background: var(--blue);
+    color: #fff;
+    border-color: var(--blue);
+  }
+  .add-cat-form-drill {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 12px;
+    background: var(--bg-elevated);
+    border: 1px dashed var(--border-2);
+    border-radius: var(--radius-lg);
+    margin-top: 10px;
+  }
+  .add-cat-form-drill .form-input {
+    flex: 1;
+  }
+  .header-back-row {
+    margin-bottom: 12px;
+  }
+  .btn-back {
+    background: transparent;
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .btn-back:hover {
+    background: var(--bg-elevated);
+    color: #fff;
+    border-color: var(--border-3);
+  }
+  .btn-back-header {
+    background: transparent;
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+  }
+  .btn-back-header:hover {
+    background: var(--bg-elevated);
+    color: #fff;
   }
 </style>

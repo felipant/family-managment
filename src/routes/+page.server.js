@@ -201,6 +201,36 @@ export const actions = {
     return { success: true };
   },
 
+  updateCategoria: async ({ request, platform }) => {
+    const db = platform?.env?.DB;
+    if (!db) return { error: 'DB indisponível' };
+    const fd = await request.formData();
+    const nome = fd.get('nome')?.toString().trim();
+    if (!nome) return { error: 'Nome obrigatório' };
+    await db.prepare('UPDATE categorias SET nome_categoria = ? WHERE id = ?').bind(nome, fd.get('id')).run();
+    return { success: true };
+  },
+
+  updateSubcategoria: async ({ request, platform }) => {
+    const db = platform?.env?.DB;
+    if (!db) return { error: 'DB indisponível' };
+    const fd = await request.formData();
+    const nome = fd.get('nome')?.toString().trim();
+    if (!nome) return { error: 'Nome obrigatório' };
+    await db.prepare('UPDATE subcategorias SET nome_subcategoria = ? WHERE id = ?').bind(nome, fd.get('id')).run();
+    return { success: true };
+  },
+
+  updateItem: async ({ request, platform }) => {
+    const db = platform?.env?.DB;
+    if (!db) return { error: 'DB indisponível' };
+    const fd = await request.formData();
+    const nome = fd.get('nome')?.toString().trim();
+    if (!nome) return { error: 'Nome obrigatório' };
+    await db.prepare('UPDATE itens SET nome_item = ? WHERE id = ?').bind(nome, fd.get('id')).run();
+    return { success: true };
+  },
+
   importCSV: async ({ request, platform }) => {
     const db = platform?.env?.DB;
     if (!db) return { error: 'DB indisponível' };
