@@ -34,50 +34,67 @@
     const gastos = data.gastos as any[];
     const cols = mesesColunas;
 
-    // Group gastos by row key and month
-    const map: Record<string, Record<string, number>> = {};
+    // map[groupKey][rowKey][month]
+    const map: Record<string, Record<string, Record<string, number>>> = {};
+    const groupNames: Record<string, string> = {};
     const rowNames: Record<string, string> = {};
 
     for (const g of gastos) {
-      const mes = g.data?.substring(0, 7); // YYYY-MM
+      const mes = g.data?.substring(0, 7);
       if (!cols.includes(mes)) continue;
 
-      let key: string;
-      let name: string;
+      let gKey: string, rKey: string, gName: string, rName: string;
+
       if (estratificacao === 'subcategoria') {
-        key = `sub-${g.subcategoria_id || 'none'}`;
-        name = g.subcategoria_nome || 'Sem subcategoria';
+        gKey = `cat-${g.categoria_id || 'none'}`;
+        gName = g.categoria_nome || 'Sem categoria';
+        rKey = `sub-${g.subcategoria_id || 'none'}`;
+        rName = g.subcategoria_nome || 'Sem subcategoria';
       } else {
-        key = `cat-${g.categoria_id || 'none'}`;
-        name = g.categoria_nome || 'Sem categoria';
+        gKey = 'all';
+        gName = '';
+        rKey = `cat-${g.categoria_id || 'none'}`;
+        rName = g.categoria_nome || 'Sem categoria';
       }
 
-      if (!map[key]) map[key] = {};
-      rowNames[key] = name;
-      map[key][mes] = (map[key][mes] || 0) + (g.valor || 0);
+      if (!map[gKey]) map[gKey] = {};
+      if (!map[gKey][rKey]) map[gKey][rKey] = {};
+      
+      groupNames[gKey] = gName;
+      rowNames[rKey] = rName;
+      map[gKey][rKey][mes] = (map[gKey][rKey][mes] || 0) + (g.valor || 0);
     }
 
-    // Sort rows by total descending
-    const rowKeys = Object.keys(map).sort((a, b) => {
-      const totalA = Object.values(map[a]).reduce((s, v) => s + v, 0);
-      const totalB = Object.values(map[b]).reduce((s, v) => s + v, 0);
-      return totalB - totalA;
-    });
+    const groups = Object.keys(map).map(gk => {
+      const rowKeys = Object.keys(map[gk]);
+      const rows = rowKeys.map(rk => {
+        const values = cols.map(c => map[gk][rk][c] || 0);
+        return {
+          key: rk,
+          name: rowNames[rk],
+          values,
+          total: values.reduce((s, v) => s + v, 0)
+        };
+      }).sort((a, b) => b.total - a.total);
 
-    // Calculate row totals
-    const rows = rowKeys.map(key => ({
-      key,
-      name: rowNames[key],
-      values: cols.map(c => map[key][c] || 0),
-      total: Object.values(map[key]).reduce((s, v) => s + v, 0)
-    }));
+      const groupValues = cols.map((_, i) => rows.reduce((s, r) => s + r.values[i], 0));
+      const groupTotal = rows.reduce((s, r) => s + r.total, 0);
 
-    // Calculate column totals (sum per month)
-    const colTotals = cols.map((c, i) => rows.reduce((s, r) => s + r.values[i], 0));
+      return {
+        key: gk,
+        name: groupNames[gk],
+        rows,
+        values: groupValues,
+        total: groupTotal
+      };
+    }).sort((a, b) => b.total - a.total);
+
+    const colTotals = cols.map((_, i) => groups.reduce((s, g) => s + g.values[i], 0));
     const grandTotal = colTotals.reduce((s, v) => s + v, 0);
 
-    return { cols, rows, colTotals, grandTotal };
+    return { cols, groups, colTotals, grandTotal };
   });
+
 
   // ── Averages (últimos 3, 6, 12 meses) ──
   let averages = $derived.by(() => {
@@ -89,9 +106,8 @@
       ref.setMonth(ref.getMonth() - monthsBack);
       const refStr = ref.toISOString().split('T')[0];
 
-      // Group by row key
       const map: Record<string, number> = {};
-      const rowNames: Record<string, string> = {};
+      const groupMap: Record<string, number> = {};
       const mesesSet = new Set<string>();
 
       for (const g of gastosAvg) {
@@ -99,28 +115,28 @@
         const mes = g.data?.substring(0, 7);
         mesesSet.add(mes);
 
-        let key: string;
-        let name: string;
+        let gKey: string, rKey: string;
         if (estratificacao === 'subcategoria') {
-          key = `sub-${g.subcategoria_id || 'none'}`;
-          name = g.subcategoria_nome || 'Sem subcategoria';
+          gKey = `cat-${g.categoria_id || 'none'}`;
+          rKey = `sub-${g.subcategoria_id || 'none'}`;
         } else {
-          key = `cat-${g.categoria_id || 'none'}`;
-          name = g.categoria_nome || 'Sem categoria';
+          gKey = 'all';
+          rKey = `cat-${g.categoria_id || 'none'}`;
         }
 
-        rowNames[key] = name;
-        map[key] = (map[key] || 0) + (g.valor || 0);
+        map[rKey] = (map[rKey] || 0) + (g.valor || 0);
+        groupMap[gKey] = (groupMap[gKey] || 0) + (g.valor || 0);
       }
 
       const numMeses = Math.max(mesesSet.size, 1);
-      const result: Record<string, number> = {};
-      for (const key of Object.keys(map)) {
-        result[key] = map[key] / numMeses;
-      }
-      // Total average
+      const perRow: Record<string, number> = {};
+      for (const key of Object.keys(map)) perRow[key] = map[key] / numMeses;
+      
+      const perGroup: Record<string, number> = {};
+      for (const key of Object.keys(groupMap)) perGroup[key] = groupMap[key] / numMeses;
+
       const totalAvg = Object.values(map).reduce((s, v) => s + v, 0) / numMeses;
-      return { perRow: result, total: totalAvg };
+      return { perRow, perGroup, total: totalAvg };
     }
 
     return {
@@ -129,6 +145,7 @@
       avg12: calcAvg(12)
     };
   });
+
 </script>
 
 <svelte:head>
@@ -201,24 +218,41 @@
             </tr>
           </thead>
           <tbody>
-            {#each pivotData.rows as row}
-              <tr class="pivot-row">
-                <td class="td-name">{row.name}</td>
-                {#each row.values as val}
-                  <td class="td-value" class:td-zero={val === 0}>{val > 0 ? fmt(val) : '—'}</td>
-                {/each}
-                <td class="td-total">{fmt(row.total)}</td>
-                <td class="td-avg">{fmt(averages.avg3.perRow[row.key] || 0)}</td>
-                <td class="td-avg">{fmt(averages.avg6.perRow[row.key] || 0)}</td>
-                <td class="td-avg">{fmt(averages.avg12.perRow[row.key] || 0)}</td>
-              </tr>
+            {#each pivotData.groups as group}
+              {#if estratificacao === 'subcategoria'}
+                <!-- Category Header Row -->
+                <tr class="pivot-group-header">
+                  <td class="td-name td-group-name">{group.name}</td>
+                  {#each group.values as gval}
+                    <td class="td-value td-group-val">{gval > 0 ? fmt(gval) : '—'}</td>
+                  {/each}
+                  <td class="td-total">{fmt(group.total)}</td>
+                  <td class="td-avg">{fmt(averages.avg3.perGroup[group.key] || 0)}</td>
+                  <td class="td-avg">{fmt(averages.avg6.perGroup[group.key] || 0)}</td>
+                  <td class="td-avg">{fmt(averages.avg12.perGroup[group.key] || 0)}</td>
+                </tr>
+              {/if}
+
+              {#each group.rows as row}
+                <tr class="pivot-row" class:row-sub={estratificacao === 'subcategoria'}>
+                  <td class="td-name">{row.name}</td>
+                  {#each row.values as val}
+                    <td class="td-value" class:td-zero={val === 0}>{val > 0 ? fmt(val) : '—'}</td>
+                  {/each}
+                  <td class="td-total">{fmt(row.total)}</td>
+                  <td class="td-avg">{fmt(averages.avg3.perRow[row.key] || 0)}</td>
+                  <td class="td-avg">{fmt(averages.avg6.perRow[row.key] || 0)}</td>
+                  <td class="td-avg">{fmt(averages.avg12.perRow[row.key] || 0)}</td>
+                </tr>
+              {/each}
             {:else}
               <tr>
                 <td colspan={pivotData.cols.length + 5} class="td-empty">Nenhum dado encontrado para o período selecionado.</td>
               </tr>
             {/each}
           </tbody>
-          {#if pivotData.rows.length > 0}
+
+          {#if pivotData.groups.length > 0}
             <tfoot>
               <tr class="pivot-total-row">
                 <td class="td-name td-total-label">Total Mensal</td>
@@ -232,12 +266,13 @@
               </tr>
             </tfoot>
           {/if}
+
         </table>
       </div>
     </div>
 
     <!-- Summary Cards -->
-    {#if pivotData.rows.length > 0}
+    {#if pivotData.groups.length > 0}
       <div class="summary-cards">
         <div class="stat-card">
           <div class="stat-label">Total do Período</div>
@@ -256,11 +291,12 @@
         </div>
         <div class="stat-card">
           <div class="stat-label">{estratificacao === 'categoria' ? 'Categorias' : 'Subcategorias'}</div>
-          <div class="stat-value">{pivotData.rows.length}</div>
+          <div class="stat-value">{pivotData.groups.reduce((acc, g) => acc + g.rows.length, 0)}</div>
           <div class="stat-sub">com lançamentos</div>
         </div>
       </div>
     {/if}
+
   </main>
 </div>
 
@@ -299,25 +335,40 @@
 .btn-filter:hover { background:var(--blue); }
 
 /* Table scroll */
-.table-scroll { overflow-x:auto; margin-bottom:24px; }
-.table-wrap {
-  background:var(--bg-card); border:1px solid var(--border);
-  border-radius:var(--radius-lg); overflow:hidden; min-width:max-content;
+.table-scroll { 
+  overflow: auto; 
+  max-height: 70vh; 
+  margin-bottom: 24px; 
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
 }
+.table-wrap {
+  min-width: max-content;
+}
+
 
 /* Pivot table */
 .pivot-table { width:100%; border-collapse:collapse; font-size:12.5px; }
-.pivot-table thead tr { background:var(--bg-elevated); border-bottom:1px solid var(--border-2); }
+.pivot-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-elevated);
+}
+.pivot-table thead tr { border-bottom:1px solid var(--border-2); }
 .pivot-table th {
   padding:10px 12px; text-align:right;
   font-size:10px; font-weight:600; color:var(--text-3);
   text-transform:uppercase; letter-spacing:0.6px; white-space:nowrap;
+  background: var(--bg-elevated);
 }
 .th-sticky {
   text-align:left; position:sticky; left:0;
-  background:var(--bg-elevated); z-index:2;
+  background:var(--bg-elevated); z-index:11;
   min-width:180px; border-right:1px solid var(--border-2);
 }
+
 .th-month { min-width:110px; }
 .th-total {
   min-width:110px; color:var(--green);
@@ -339,6 +390,35 @@
   z-index:1; white-space:nowrap; border-right:1px solid var(--border);
 }
 .pivot-row:hover .td-name { background:var(--bg-hover); }
+
+/* Group header row styles */
+.pivot-group-header {
+  position: sticky;
+  top: 36px; /* Adjust based on header height if needed, but thead sticky top 0 usually handles it if table-scroll is the container */
+  z-index: 5;
+  background: var(--bg-elevated);
+  border-top: 2px solid var(--border-2);
+  border-bottom: 1px solid var(--border-2);
+}
+
+.td-group-name {
+  background: var(--bg-elevated) !important;
+  color: var(--blue) !important;
+  font-weight: 700 !important;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.td-group-val {
+  font-weight: 600;
+  color: var(--text);
+}
+.row-sub .td-name {
+  padding-left: 28px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
 
 .td-value {
   padding:10px 12px; text-align:right;
@@ -366,15 +446,20 @@
 
 /* Total footer row */
 .pivot-total-row {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
   background:var(--bg-elevated);
   border-top:2px solid var(--border-2);
 }
+
 .td-total-label {
   padding:12px 14px; font-weight:700; color:var(--text);
   text-transform:uppercase; font-size:11px; letter-spacing:0.5px;
   position:sticky; left:0; background:var(--bg-elevated);
-  z-index:1; border-right:1px solid var(--border);
+  z-index:11; border-right:1px solid var(--border);
 }
+
 .td-total-value {
   padding:12px 12px; text-align:right;
   font-family:'DM Mono',monospace; font-size:12.5px;

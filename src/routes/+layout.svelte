@@ -6,6 +6,14 @@
 
   let sidebarOpen = $state(true);
 
+  import { onMount } from "svelte";
+  onMount(() => {
+    if (window.innerWidth < 768) {
+      sidebarOpen = false;
+    }
+  });
+
+
   const NAV = [
     { href: "/", icon: "◈", label: "Gastos", sub: "Lançamentos" },
     {
@@ -339,4 +347,10 @@
     min-width: 0;
     min-height: 100vh;
   }
+  @media (max-width: 768px) {
+    .content {
+      margin-left: 60px; /* Force small margin on mobile since it's collapsed by default */
+    }
+  }
+
 </style>

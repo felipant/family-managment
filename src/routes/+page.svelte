@@ -551,7 +551,7 @@
             {#each cItens as ci, idx}
               <div class="item-line">
                 <!-- Item search -->
-                <div class="item-field" style="flex:2; position:relative;">
+                <div class="item-field" style="flex:2; position:relative;" data-label="Item">
                   <input
                     id="search-input-{idx}"
                     class="form-input"
@@ -584,8 +584,9 @@
                   {/if}
                 </div>
 
+
                 <!-- Valor -->
-                <div class="item-field" style="flex:1">
+                <div class="item-field" style="flex:1" data-label="Valor (R$)">
                   <input
                     id="valor-input-{idx}"
                     class="form-input"
@@ -600,8 +601,9 @@
                   />
                 </div>
 
+
                 <!-- Subcategoria (auto) -->
-                <div class="item-field" style="flex:1.2">
+                <div class="item-field" style="flex:1.2" data-label="Subcategoria">
                   <input
                     class="form-input readonly-input"
                     type="text"
@@ -611,8 +613,9 @@
                   />
                 </div>
 
+
                 <!-- Categoria (auto) -->
-                <div class="item-field" style="flex:1.2">
+                <div class="item-field" style="flex:1.2" data-label="Categoria">
                   <input
                     class="form-input readonly-input"
                     type="text"
@@ -622,8 +625,9 @@
                   />
                 </div>
 
+
                 <!-- Comentário -->
-                <div class="item-field" style="flex:1.5">
+                <div class="item-field" style="flex:1.5" data-label="Comentário">
                   <input
                     class="form-input"
                     type="text"
@@ -631,6 +635,7 @@
                     bind:value={ci.comentario}
                   />
                 </div>
+
 
                 <!-- Remove -->
                 <div style="display:flex;align-items:center;width:28px">
@@ -1396,6 +1401,15 @@
     gap: 16px;
     flex-wrap: wrap;
   }
+  @media (max-width: 768px) {
+    .header-inner {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 16px;
+    }
+  }
+
   .brand {
     display: flex;
     align-items: center;
@@ -1432,6 +1446,17 @@
     gap: 10px;
     flex-wrap: wrap;
   }
+  @media (max-width: 768px) {
+    .header-actions {
+      width: 100%;
+      flex-direction: column;
+    }
+    .btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
 
   /* ── Buttons ──────────────────────────────────────────────────────────── */
   .btn {
@@ -1526,6 +1551,12 @@
     width: 100%;
     flex: 1;
   }
+  @media (max-width: 768px) {
+    .main {
+      padding: 16px 12px;
+    }
+  }
+
 
   /* ── Filters ──────────────────────────────────────────────────────────── */
   .filters-bar {
@@ -1859,6 +1890,13 @@
     flex-wrap: wrap;
     margin-bottom: 18px;
   }
+  @media (max-width: 768px) {
+    .form-row {
+      flex-direction: column;
+      gap: 10px;
+    }
+  }
+
   .form-group {
     display: flex;
     flex-direction: column;
@@ -1951,6 +1989,12 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
+  @media (max-width: 768px) {
+    .items-grid-header {
+      display: none;
+    }
+  }
+
   .item-line {
     display: flex;
     gap: 8px;
@@ -1961,9 +2005,29 @@
     border-radius: var(--radius);
     transition: border-color 0.15s;
   }
+  @media (max-width: 768px) {
+    .item-line {
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px;
+    }
+    .item-field {
+      width: 100% !important;
+      flex: none !important;
+    }
+    .item-field::before {
+      content: attr(data-label);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-3);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+  }
   .item-line:hover {
     border-color: var(--border-2);
   }
+
   .item-field {
     display: flex;
     flex-direction: column;
@@ -2028,10 +2092,24 @@
     margin-top: 28px;
     transition: all 0.15s;
   }
+  @media (max-width: 768px) {
+    .btn-rm-line {
+      margin-top: 0;
+      width: 100%;
+      height: 36px;
+      background: var(--red-bg);
+      color: var(--red);
+      font-weight: 600;
+    }
+    .btn-rm-line::after {
+      content: " Remover linha";
+    }
+  }
   .btn-rm-line:hover {
     background: var(--red-bg);
     color: var(--red);
   }
+
 
   /* ── Compra total ─────────────────────────────────────────────────────── */
   .compra-total {
