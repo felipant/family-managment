@@ -30,12 +30,30 @@
     return cols;
   });
 
+  // ── Drill down state ──
+  let showDetails = $state(false);
+  let detailTitle = $state("");
+  let detailItems = $state<any[]>([]);
+
+  function openDetails(items: any[], title: string) {
+    if (!items.length) return;
+    detailItems = [...items].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    detailTitle = title;
+    showDetails = true;
+  }
+
+  function fmtDate(d: string) {
+    if (!d) return "—";
+    const [y, m, dd] = d.split("-");
+    return `${dd}/${m}/${y}`;
+  }
+
   let pivotData = $derived.by(() => {
     const gastos = data.gastos as any[];
     const cols = mesesColunas;
 
-    // map[groupKey][rowKey][month]
-    const map: Record<string, Record<string, Record<string, number>>> = {};
+    // map[groupKey][rowKey][month] -> items[]
+    const map: Record<string, Record<string, Record<string, any[]>>> = {};
     const groupNames: Record<string, string> = {};
     const rowNames: Record<string, string> = {};
 
@@ -59,25 +77,38 @@
 
       if (!map[gKey]) map[gKey] = {};
       if (!map[gKey][rKey]) map[gKey][rKey] = {};
+      if (!map[gKey][rKey][mes]) map[gKey][rKey][mes] = [];
       
       groupNames[gKey] = gName;
       rowNames[rKey] = rName;
-      map[gKey][rKey][mes] = (map[gKey][rKey][mes] || 0) + (g.valor || 0);
+      map[gKey][rKey][mes].push(g);
     }
 
     const groups = Object.keys(map).map(gk => {
       const rowKeys = Object.keys(map[gk]);
       const rows = rowKeys.map(rk => {
-        const values = cols.map(c => map[gk][rk][c] || 0);
+        const cellValues = cols.map(c => {
+          const items = map[gk][rk][c] || [];
+          return {
+            sum: items.reduce((s, g) => s + (g.valor || 0), 0),
+            items
+          };
+        });
         return {
           key: rk,
           name: rowNames[rk],
-          values,
-          total: values.reduce((s, v) => s + v, 0)
+          values: cellValues,
+          total: cellValues.reduce((s, v) => s + v.sum, 0)
         };
       }).sort((a, b) => b.total - a.total);
 
-      const groupValues = cols.map((_, i) => rows.reduce((s, r) => s + r.values[i], 0));
+      const groupValues = cols.map((_, i) => {
+        const items = rows.flatMap(r => r.values[i].items);
+        return {
+          sum: rows.reduce((s, r) => s + r.values[i].sum, 0),
+          items
+        };
+      });
       const groupTotal = rows.reduce((s, r) => s + r.total, 0);
 
       return {
@@ -89,12 +120,17 @@
       };
     }).sort((a, b) => b.total - a.total);
 
-    const colTotals = cols.map((_, i) => groups.reduce((s, g) => s + g.values[i], 0));
-    const grandTotal = colTotals.reduce((s, v) => s + v, 0);
+    const colTotals = cols.map((_, i) => {
+      const items = groups.flatMap(g => g.values[i].items);
+      return {
+        sum: groups.reduce((s, g) => s + g.values[i].sum, 0),
+        items
+      };
+    });
+    const grandTotal = colTotals.reduce((s, v) => s + v.sum, 0);
 
     return { cols, groups, colTotals, grandTotal };
   });
-
 
   // ── Averages (últimos 3, 6, 12 meses) ──
   let averages = $derived.by(() => {
@@ -145,7 +181,6 @@
       avg12: calcAvg(12)
     };
   });
-
 </script>
 
 <svelte:head>
@@ -223,8 +258,14 @@
                 <!-- Category Header Row -->
                 <tr class="pivot-group-header">
                   <td class="td-name td-group-name">{group.name}</td>
-                  {#each group.values as gval}
-                    <td class="td-value td-group-val">{gval > 0 ? fmt(gval) : '—'}</td>
+                  {#each group.values as gval, i}
+                    <td 
+                      class="td-value td-group-val" 
+                      class:clickable={gval.sum > 0}
+                      onclick={() => openDetails(gval.items, `${group.name} — ${MESES_NOMES[parseInt(pivotData.cols[i].split('-')[1]) - 1]}/${ano}`)}
+                    >
+                      {gval.sum > 0 ? fmt(gval.sum) : '—'}
+                    </td>
                   {/each}
                   <td class="td-total">{fmt(group.total)}</td>
                   <td class="td-avg">{fmt(averages.avg3.perGroup[group.key] || 0)}</td>
@@ -236,8 +277,15 @@
               {#each group.rows as row}
                 <tr class="pivot-row" class:row-sub={estratificacao === 'subcategoria'}>
                   <td class="td-name">{row.name}</td>
-                  {#each row.values as val}
-                    <td class="td-value" class:td-zero={val === 0}>{val > 0 ? fmt(val) : '—'}</td>
+                  {#each row.values as val, i}
+                    <td 
+                      class="td-value" 
+                      class:td-zero={val.sum === 0} 
+                      class:clickable={val.sum > 0}
+                      onclick={() => openDetails(val.items, `${row.name} — ${MESES_NOMES[parseInt(pivotData.cols[i].split('-')[1]) - 1]}/${ano}`)}
+                    >
+                      {val.sum > 0 ? fmt(val.sum) : '—'}
+                    </td>
                   {/each}
                   <td class="td-total">{fmt(row.total)}</td>
                   <td class="td-avg">{fmt(averages.avg3.perRow[row.key] || 0)}</td>
@@ -256,8 +304,13 @@
             <tfoot>
               <tr class="pivot-total-row">
                 <td class="td-name td-total-label">Total Mensal</td>
-                {#each pivotData.colTotals as ct}
-                  <td class="td-total-value">{fmt(ct)}</td>
+                {#each pivotData.colTotals as ct, i}
+                  <td 
+                    class="td-total-value clickable" 
+                    onclick={() => openDetails(ct.items, `Total — ${MESES_NOMES[parseInt(pivotData.cols[i].split('-')[1]) - 1]}/${ano}`)}
+                  >
+                    {fmt(ct.sum)}
+                  </td>
                 {/each}
                 <td class="td-grand-total">{fmt(pivotData.grandTotal)}</td>
                 <td class="td-total-avg">{fmt(averages.avg3.total)}</td>
@@ -266,7 +319,6 @@
               </tr>
             </tfoot>
           {/if}
-
         </table>
       </div>
     </div>
@@ -296,9 +348,49 @@
         </div>
       </div>
     {/if}
-
   </main>
 </div>
+
+<!-- ── Detail Modal ── -->
+{#if showDetails}
+  <div class="overlay" role="dialog" aria-modal="true" onclick={() => (showDetails = false)}>
+    <div class="modal modal-details" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-hdr">
+        <div class="modal-hdr-text">
+          <h2 class="modal-title">{detailTitle}</h2>
+          <span class="modal-subtitle">{detailItems.length} lançamentos</span>
+        </div>
+        <button class="modal-close" onclick={() => (showDetails = false)}>✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="details-list">
+          {#each detailItems as item}
+            <div class="detail-item">
+              <div class="di-left">
+                <span class="di-date">{fmtDate(item.data)}</span>
+                <span class="di-item-name">{item.item_nome}</span>
+                {#if item.comentario}
+                  <span class="di-comment">{item.comentario}</span>
+                {/if}
+              </div>
+              <div class="di-right">
+                <span class="di-value">{fmt(item.valor)}</span>
+                <span class="di-pay">{item.pagamento}</span>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+      <div class="modal-ftr">
+        <div class="detail-total">
+          <span>Total</span>
+          <strong>{fmt(detailItems.reduce((s, i) => s + (i.valor || 0), 0))}</strong>
+        </div>
+        <button type="button" class="btn btn-ghost" onclick={() => (showDetails = false)}>Fechar</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
 .page { display:flex; flex-direction:column; min-height:100vh; background:var(--bg); }
@@ -347,7 +439,6 @@
   min-width: max-content;
 }
 
-
 /* Pivot table */
 .pivot-table { width:100%; border-collapse:collapse; font-size:12.5px; }
 .pivot-table thead {
@@ -394,7 +485,7 @@
 /* Group header row styles */
 .pivot-group-header {
   position: sticky;
-  top: 36px; /* Adjust based on header height if needed, but thead sticky top 0 usually handles it if table-scroll is the container */
+  top: 36px; /* Adjust based on header height if needed */
   z-index: 5;
   background: var(--bg-elevated);
   border-top: 2px solid var(--border-2);
@@ -419,13 +510,33 @@
   font-size: 12px;
 }
 
-
 .td-value {
   padding:10px 12px; text-align:right;
   font-family:'DM Mono',monospace; font-size:12px;
   color:var(--text-2); white-space:nowrap;
 }
 .td-zero { color:var(--text-3); }
+
+.clickable {
+  cursor: pointer;
+  position: relative;
+}
+.clickable:hover {
+  background: rgba(66, 133, 255, 0.1) !important;
+  color: #fff !important;
+}
+.clickable::after {
+  content: "🔍";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.clickable:hover::after {
+  opacity: 0.5;
+}
 
 .td-total {
   padding:10px 12px; text-align:right;
@@ -494,4 +605,76 @@
 .stat-value.blue { color:var(--blue); }
 .stat-value.amber { color:var(--amber); }
 .stat-sub { font-size:11.5px; color:var(--text-3); font-family:'DM Mono',monospace; }
+
+/* Modal & Detail Overlay */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 6, 18, 0.85);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-hdr-text { display: flex; flex-direction: column; gap: 2px; }
+.modal-title { font-size: 18px; font-weight: 700; color: #fff; }
+.modal-subtitle { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+.modal-close {
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-elevated); color: var(--text-2); font-size: 13px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.14s;
+}
+.modal-close:hover { background: var(--red-bg); color: var(--red); }
+
+.modal-body { padding: 0; overflow-y: auto; flex: 1; }
+.details-list { display: flex; flex-direction: column; }
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.detail-item:hover { background: var(--bg-hover); }
+.detail-item:last-child { border-bottom: none; }
+
+.di-left { display: flex; flex-direction: column; gap: 2px; }
+.di-date { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-3); }
+.di-item-name { font-weight: 500; color: #fff; font-size: 14px; }
+.di-comment { font-size: 12px; color: var(--text-3); font-style: italic; }
+
+.di-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.di-value { font-family: 'Inter', sans-serif; font-weight: 700; color: var(--green); font-size: 15px; }
+.di-pay { font-size: 10px; color: var(--text-3); text-transform: uppercase; }
+
+.modal-ftr {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 24px; border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+.detail-total { display: flex; flex-direction: column; }
+.detail-total span { font-size: 11px; color: var(--text-3); text-transform: uppercase; }
+.detail-total strong { font-size: 20px; color: var(--green); }
 </style>
